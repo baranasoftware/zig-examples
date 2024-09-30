@@ -1,2 +1,3 @@
-# zig-examples
-Collections of zig samples
+Collections of zig examples
+
+* [Hello World](intro/hello.zig)
