@@ -1,4 +1,4 @@
-Collections of zig examples
+A collections of Zig examples
 
 * [Unicode Support](intro/hello.zig)
 * [Random Numbers](intro/rand.zig)
