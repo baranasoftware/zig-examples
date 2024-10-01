@@ -1,4 +1,5 @@
 Collections of zig examples
 
-* [Hello World](intro/hello.zig)
+* [Unicode Support](intro/hello.zig)
+* [Random Numbers](intro/rand.zig)
 * [Functions, Struct, Unions, Arrays, Slices](intro/ds.zig)

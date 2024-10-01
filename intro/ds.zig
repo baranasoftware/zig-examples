@@ -11,6 +11,12 @@ pub fn main() void {
 pub const User = struct {
     power: u64,
     name: []const u8,
+
+    pub const SUPER_POWER = 9000;
+
+    pub fn print(user: User) void {
+        if (user.power >= SUPER_POWER) {}
+    }
 };
 
 fn add(a: i64, b: i64) i64 {
