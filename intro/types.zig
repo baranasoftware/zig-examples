@@ -1,8 +1,11 @@
 const std = @import("std");
 
 pub fn main() void {
-    const sum = add(9001, 2);
-    std.debug.print("9001 + 2 = {d}\n", .{sum});
+    // function
+    const sum = add(42, 13);
+    std.debug.print("42 + 13 = {d}\n", .{sum});
+
+    // basic types
 
     const user = User{ .power = 9001, .name = "Goku" };
     std.debug.print("{s}'s power is {d}\n", .{ user.name, user.power });
@@ -19,6 +22,6 @@ pub const User = struct {
     }
 };
 
-fn add(a: i64, b: i64) i64 {
-    return a + b;
+fn add(x: i64, y: i64) i64 {
+    return x + y;
 }
