@@ -1,6 +1,7 @@
 A collections of Zig examples
 
-* [Unicode Support](intro/hello.zig)
-* [Random Numbers](intro/rand.zig)
-* [Using Pacakges](intro/pacakges.zig)
-* [Functions, Struct, Unions, Arrays, Slices](intro/types.zig)
+* [Unicode Support](hello.zig)
+* [Random Numbers](rand.zig)
+* [Using Pacakges](pacakges.zig)
+* [Basic Types][basictypes.zig]
+* [Functions, Struct, Unions, Arrays, Slices](types.zig)
