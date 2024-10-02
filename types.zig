@@ -1,14 +1,19 @@
-const std = @import("std");
+const print = @import("std").debug.print;
 
 pub fn main() void {
     // function
     const sum = add(42, 13);
-    std.debug.print("42 + 13 = {d}\n", .{sum});
+    print("42 + 13 = {d}\n", .{sum});
 
-    // basic types
+    // type of string data
+    const s1 = "zig";
+    const s2 = "is great";
+    print("{s} {s}, {}, {}\n", .{ s1, s2, @TypeOf(s1), @TypeOf(s2) });
 
+    // struct
     const user = User{ .power = 9001, .name = "Goku" };
-    std.debug.print("{s}'s power is {d}\n", .{ user.name, user.power });
+    print("{s}'s power is {d}\n", .{ user.name, user.power });
+    user.print2();
 }
 
 pub const User = struct {
@@ -17,8 +22,10 @@ pub const User = struct {
 
     pub const SUPER_POWER = 9000;
 
-    pub fn print(user: User) void {
-        if (user.power >= SUPER_POWER) {}
+    pub fn print2(user: User) void {
+        if (user.power >= SUPER_POWER) {
+            print("it's over {d}, {s}\n", .{ SUPER_POWER, user.name });
+        }
     }
 };
 
