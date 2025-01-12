@@ -7,3 +7,4 @@ A collections of Zig examples
 * [For, While Loops](loops.zig)
 * [Strings, Vector, Struct, Unions, Arrays, Slices](types.zig)
 * [Command line arguments](args.zig)
+* [Single thread TCP server](server1.zig)
