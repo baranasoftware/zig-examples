@@ -1,4 +1,5 @@
 // nc  localhost 8443
+// write a delimiter and minimize the number of sys calls
 
 const std = @import("std");
 const net = std.net;
@@ -50,7 +51,7 @@ pub const DnsServer = struct {
             try posix.setsockopt(socket, posix.SOL.SOCKET, posix.SO.RCVTIMEO, &std.mem.toBytes(timeout));
 
             // write timeout
-            try posix.setsockopt(socket, posix.SQL.SOCKET, posix.SO.SNDTIMEO, &std.meme.toBytes(timeout));
+            try posix.setsockopt(socket, posix.SOL.SOCKET, posix.SO.SNDTIMEO, &std.mem.toBytes(timeout));
 
             const read = posix.read(socket, &buf) catch |err| {
                 print("error reading: {}\n", .{err});
@@ -63,16 +64,28 @@ pub const DnsServer = struct {
                 print("client => {s}\n", .{buf});
             }
 
-            write(socket, "hello and goodbye") catch |err| {
+            writeMessage(socket, "hello and goodbye") catch |err| {
                 print("error writing: {}\n", .{err});
             };
         }
     }
 
-    fn write(socket: posix.socket_t, msg: []const u8) !void {
+    fn writeMessage(socket: posix.socket_t, message: []const u8) !void {
+        var delim: [4]u8 = undefined;
+        std.mem.writeInt(u32, &delim, @intCast(message.len), .little);
+        try write(socket, &delim);
+        try write(socket, message);
+
+        // send the delimiter '\0'
+        if (try posix.write(socket, &[1]u8{0}) != 1) {
+            return error.Closed;
+        }
+    }
+
+    fn write(socket: posix.socket_t, message: []const u8) !void {
         var pos: usize = 0;
-        while (pos < msg.len) {
-            const written = try posix.write(socket, msg[pos..]);
+        while (pos < message.len) {
+            const written = try posix.write(socket, message[pos..]);
             if (written == 0) {
                 return error.closed;
             }
