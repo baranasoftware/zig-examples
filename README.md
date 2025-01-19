@@ -9,4 +9,6 @@ A collections of Zig examples
 * [Command line arguments](args.zig)
 * [CPU endian](endian.zig)
 * [Single thread TCP server](server1.zig)
-* [Multi thread TCP server](server2.zig)
+* [Using single copy TCP server](server2.zig)
+* [Improved single threaded TCP server](server3.zig)
+* [Single thread TCP server(no allocator)](server4.zig)
