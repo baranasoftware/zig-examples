@@ -11,4 +11,5 @@ A collections of Zig examples
 * [Single thread TCP server](server1.zig)
 * [Using single copy TCP server](server2.zig)
 * [Improved single threaded TCP server](server3.zig)
-* [Single thread TCP server(no allocator)](server4.zig)
+* [Single thread TCP server(Vectored I/O)](server4.zig)
+* [Multi-threaded server](multi-thread.zig)

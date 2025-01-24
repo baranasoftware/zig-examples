@@ -74,15 +74,16 @@ pub const DnsServer = struct {
         var buf: [4]u8 = undefined;
         std.mem.writeInt(u32, &buf, @intCast(message.len), .little);
 
+        // vectored I/O (scatter/gather I/O)
         var vec = [2]posix.iovec_const{
             .{ .len = 4, .base = &buf },
             .{ .len = message.len, .base = message.ptr },
         };
 
-        try write(socket, &vec); // write vectored
+        try writeAllVectored(socket, &vec); // write vectored
     }
 
-    fn write(socket: posix.socket_t, vec: []posix.iovec_const) !void {
+    fn writeAllVectored(socket: posix.socket_t, vec: []posix.iovec_const) !void {
         var i: usize = 0;
         while (true) {
             var n = try posix.writev(socket, vec[i..]);
