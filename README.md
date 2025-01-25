@@ -13,3 +13,4 @@ A collections of Zig examples
 * [Improved single threaded TCP server](server3.zig)
 * [Single thread TCP server(Vectored I/O)](server4.zig)
 * [Multi-threaded server](multi-thread.zig)
+* [Multi-threaded - thread pool](multi-thread2.zig)
