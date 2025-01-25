@@ -21,6 +21,12 @@ pub const DnsServer = struct {
     }
 
     pub fn start(self: DnsServer) !void {
+        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+        const allocator = gpa.allocator();
+
+        var pool: std.Thread.Pool = undefined;
+        try std.Thread.Pool.init(&pool, .{ .allocator = allocator, .n_jobs = 64 });
+
         const address = try std.net.Address.parseIp(self.ip_addr, self.port);
         const tpe: u32 = posix.SOCK.STREAM;
         const protocol = posix.IPPROTO.TCP;
@@ -40,8 +46,7 @@ pub const DnsServer = struct {
                 continue;
             };
             const client = Client{ .socket = socket, .address = client_address };
-            const thread = try std.Thread.spawn(.{}, Client.handleConn, .{client});
-            thread.detach();
+            try pool.spawn(Client.handleConn, .{client});
         }
     }
 
