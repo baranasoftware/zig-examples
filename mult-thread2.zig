@@ -25,7 +25,7 @@ pub const DnsServer = struct {
         const allocator = gpa.allocator();
 
         var pool: std.Thread.Pool = undefined;
-        try std.Thread.Pool.init(&pool, .{ .allocator = allocator, .n_jobs = 64 });
+        try pool.init(std.Thread.Pool.Options{ .allocator = allocator, .n_jobs = 64 });
 
         const address = try std.net.Address.parseIp(self.ip_addr, self.port);
         const tpe: u32 = posix.SOCK.STREAM;

@@ -14,3 +14,5 @@ A collections of Zig examples
 * [Single thread TCP server(Vectored I/O)](server4.zig)
 * [Multi-threaded server](multi-thread.zig)
 * [Multi-threaded - thread pool](multi-thread2.zig)
+* [Socket(Poll)](poll.zig)
+* [Thread example](thread.zig)
