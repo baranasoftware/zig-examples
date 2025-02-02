@@ -8,7 +8,7 @@ const posix = std.posix;
 pub fn main() !void {
     const server = DnsServer.init("127.0.0.1", 8443);
     try server.start();
-    print("dns server is ready\n", .{});
+    std.debug.print("dns server is ready\n", .{});
 }
 
 pub const DnsServer = struct {
@@ -21,7 +21,7 @@ pub const DnsServer = struct {
 
     pub fn start(self: DnsServer) !void {
         const address = try std.net.Address.parseIp(self.ip_addr, self.port);
-        const tpe:u32 = posix.SOCK.STREAM | posix.SOCK.NONBLOCK;
+        const tpe: u32 = posix.SOCK.STREAM | posix.SOCK.NONBLOCK;
         const protocol = posix.IPPROTO.TCP;
         const listener = try posix.socket(address.any.family, tpe, protocol);
         defer posix.close(listener);
@@ -30,87 +30,68 @@ pub const DnsServer = struct {
         try posix.bind(listener, &address.any, address.getOsSockLen());
         try posix.listen(listener, 128);
 
-        var polls:[4096]posix.pollfd = undefined;
-        possl[0] = .{
-            .fd = listener, 
+        var polls: [4096]posix.pollfd = undefined;
+        polls[0] = .{
+            .fd = listener,
             .events = posix.POLL.IN,
             .revents = 0,
         };
 
-        var poll_count:usize = 1;
+        var poll_count: usize = 1;
 
-    
         while (true) {
-            var active = polls[0..poll_count + 1];
+            var active = polls[0 .. poll_count + 1];
             _ = try posix.poll(active, -1);
 
-            if (active[0].revents !=0 ) { // active[0] is the listening socket
+            if (active[0].revents != 0) { // active[0] is the listening socket
                 var client_address: net.Address = undefined;
                 var client_address_len: posix.socklen_t = @sizeOf(net.Address);
 
-                const socket = posix.accept(listener, &client_address.any, &client_address_len, posix.SOCK.NONBLOCK) catch |err| {
-                    print("error accepting connection: {}\n", .{err});
-                    continue;
+                const socket = try posix.accept(listener, &client_address.any, &client_address_len, posix.SOCK.NONBLOCK);
+
+                polls[poll_count] = .{
+                    .fd = socket,
+                    .revents = 0,
+                    .events = posix.POLL.IN,
                 };
-            }
-        }
 
-
-        while (true) {
-
-            const socket = posix.accept(listener, &client_address.any, &client_address_len, 0) catch |err| {
-                print("error accepting connection: {}\n", .{err});
-                continue;
-            };
-            defer posix.close(socket);
-
-            print("{} connected\n", .{client_address});
-
-            const timeout = posix.timeval{ .tv_sec = 2, .tv_usec = 500_000 };
-
-            // read timeout
-            try posix.setsockopt(socket, posix.SOL.SOCKET, posix.SO.RCVTIMEO, &std.mem.toBytes(timeout));
-
-            // write timeout
-            try posix.setsockopt(socket, posix.SOL.SOCKET, posix.SO.SNDTIMEO, &std.mem.toBytes(timeout));
-
-            const read = posix.read(socket, &buf) catch |err| {
-                print("error reading: {}\n", .{err});
-                continue;
-            };
-
-            if (read == 0) {
-                continue;
-            } else {
-                print("client => {s}\n", .{buf});
+                poll_count += 1;
             }
 
-            writeMessage(socket, "hello and goodbye") catch |err| {
-                print("error writing: {}\n", .{err});
-            };
-        }
-    }
+            var i: usize = 1;
+            while (i < active.len) {
+                const polled = active[i];
 
-    fn writeMessage(socket: posix.socket_t, message: []const u8) !void {
-        var delim: [4]u8 = undefined;
-        std.mem.writeInt(u32, &delim, @intCast(message.len), .little);
-        try write(socket, &delim);
-        try write(socket, message);
+                const revents = polled.revents;
+                if (revents == 0) {
+                    //not ready yet
+                    i += 1;
+                    continue;
+                }
+                var closed = false;
+                if (revents & posix.POLL.IN == posix.POLL.IN) {
+                    // socket is ready for polling
+                    var buf: [4096]u8 = undefined;
+                    const read = posix.read(polled.fd, &buf) catch 0;
+                    if (read == 0) {
+                        closed = true;
+                    } else {
+                        std.debug.print("[{d}] got: {any}\n", .{ polled.fd, buf[0..read] });
+                    }
+                }
 
-        // send the delimiter '\0'
-        if (try posix.write(socket, &[1]u8{0}) != 1) {
-            return error.Closed;
-        }
-    }
+                if (closed or (revents & posix.POLL.HUP == posix.POLL.HUP)) {
+                    // read failed or socket is closed
+                    posix.close(polled.fd);
 
-    fn write(socket: posix.socket_t, message: []const u8) !void {
-        var pos: usize = 0;
-        while (pos < message.len) {
-            const written = try posix.write(socket, message[pos..]);
-            if (written == 0) {
-                return error.closed;
+                    const last_index = active.len - 1;
+                    active[i] = active[last_index];
+                    active = active[0..last_index];
+                    poll_count = 1;
+                } else {
+                    i += 1; // go to the next socket
+                }
             }
-            pos += written;
         }
     }
 };
