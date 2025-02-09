@@ -15,10 +15,11 @@ pub fn main() !void {
     var server = try Server.init(allocator, 4096);
     defer server.deinit();
 
-    const address = try std.net.Address.parseIp("127.0.0.1", 8443);
+    const host = "127.0.0.1";
+    const port = 8443;
+    std.debug.print("dns server is ready: {s}:{d}\n", .{ host, port });
+    const address = try std.net.Address.parseIp(host, port);
     try server.run(address);
-
-    std.debug.print("dns server is ready\n", .{});
 }
 
 const Server = struct {
@@ -26,7 +27,7 @@ const Server = struct {
     connected: usize,
     polls: []posix.pollfd,
     clients: []Client,
-    clients_polls: []posix.pollfd,
+    client_polls: []posix.pollfd,
 
     fn init(allocator: Allocator, max: usize) !Server {
         const polls = try allocator.alloc(posix.pollfd, max + 1);
@@ -47,6 +48,95 @@ const Server = struct {
     fn deinit(self: *Server) void {
         self.allocator.free(self.polls);
         self.allocator.free(self.clients);
+    }
+
+    fn run(self: *Server, address: std.net.Address) !void {
+        const tpe: u32 = posix.SOCK.STREAM | posix.SOCK.NONBLOCK;
+        const protocol = posix.IPPROTO.TCP;
+        const listener = try posix.socket(address.any.family, tpe, protocol);
+        defer posix.close(listener);
+
+        try posix.setsockopt(listener, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
+        try posix.bind(listener, &address.any, address.getOsSockLen());
+        try posix.listen(listener, 128);
+
+        self.polls[0] = .{
+            .fd = listener,
+            .events = posix.POLL.IN,
+            .revents = 0,
+        };
+
+        while (true) {
+            _ = try posix.poll(self.polls[0 .. self.connected + 1], -1);
+
+            if (self.polls[0].revents != 0) { // active[0] is the listening socket
+                self.accept(listener) catch |err| log.err("failed to accept conn: {}", .{err});
+            }
+
+            var i: usize = 1;
+            while (i < self.connected) {
+                const revents = self.client_polls[i].revents;
+                if (revents == 0) {
+                    //not ready yet
+                    i += 1;
+                    continue;
+                }
+
+                var client = &self.clients[i];
+                if (revents & posix.POLL.IN == posix.POLL.IN) {
+                    while (true) {
+                        const msg = client.readMessage() catch {
+                            self.removeClient(i);
+                            break;
+                        } orelse {
+                            i += 1;
+                            break;
+                        };
+                        std.debug.print("got: {s}\n", .{msg});
+                    }
+                }
+            }
+        }
+    }
+
+    fn accept(self: *Server, listener: posix.socket_t) !void {
+        while (true) {
+            var address: net.Address = undefined;
+            var address_len: posix.socklen_t = @sizeOf(net.Address);
+
+            const socket = posix.accept(listener, &address.any, &address_len, posix.SOCK.NONBLOCK) catch |err| switch (err) {
+                error.WouldBlock => return,
+                else => return err,
+            };
+
+            const client = Client.init(self.allocator, socket, address) catch |err| {
+                posix.close(socket);
+                log.err("failed to initialize client: {}", .{err});
+                return;
+            };
+
+            const connected = self.connected;
+            self.clients[connected] = client;
+            self.client_polls[connected] = .{
+                .fd = socket,
+                .revents = 0,
+                .events = posix.POLL.IN,
+            };
+            self.connected = connected + 1;
+        }
+    }
+
+    fn removeClient(self: *Server, at: usize) void {
+        var client = self.clients[at];
+
+        posix.close(client.socket);
+        client.deinit(self.allocator);
+
+        const last_index = self.connected - 1;
+        self.clients[at] = self.clients[last_index];
+        self.client_polls[at] = self.client_polls[last_index];
+
+        self.connected = last_index;
     }
 };
 
@@ -154,164 +244,5 @@ const Reader = struct {
         std.mem.copyForwards(u8, buf[0..unprocessed.len], unprocessed);
         self.start = 0;
         self.pos = unprocessed.len;
-    }
-
-    fn run() !void {
-        const tpe: u32 = posix.SOCK.STREAM | posix.SOCK.NONBLOCK;
-        const protocol = posix.IPPROTO.TCP;
-        const listener = try posix.socket(address.any.family, tpe, protocol);
-        defer posix.close(listener);
-
-        try posix.setsockopt(listener, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
-        try posix.bind(listener, &address.any, address.getOsSockLen());
-        try posix.listen(listener, 128);
-
-        self.polls[0] = .{
-            .fd = listener,
-            .events = posix.POLL.IN,
-            .revents = 0,
-        };
-
-
-        while (true) {
-            _ = try posix.poll(self.polls[0..self.connected + 1], -1);
-
-            if (self.[0].revents != 0) { // active[0] is the listening socket
-                var client_address: net.Address = undefined;
-                var client_address_len: posix.socklen_t = @sizeOf(net.Address);
-
-                const socket = try posix.accept(listener, &client_address.any, &client_address_len, posix.SOCK.NONBLOCK);
-
-                polls[poll_count] = .{
-                    .fd = socket,
-                    .revents = 0,
-                    .events = posix.POLL.IN,
-                };
-
-                poll_count += 1;
-            }
-
-            var i: usize = 1;
-            while (i < active.len) {
-                const polled = active[i];
-
-                const revents = polled.revents;
-                if (revents == 0) {
-                    //not ready yet
-                    i += 1;
-                    continue;
-                }
-                var closed = false;
-                if (revents & posix.POLL.IN == posix.POLL.IN) {
-                    // socket is ready for polling
-                    var buf: [4096]u8 = undefined;
-                    const read = posix.read(polled.fd, &buf) catch 0;
-                    if (read == 0) {
-                        closed = true;
-                    } else {
-                        std.debug.print("[{d}] got: {any}\n", .{ polled.fd, buf[0..read] });
-                    }
-                }
-
-                if (closed or (revents & posix.POLL.HUP == posix.POLL.HUP)) {
-                    // read failed or socket is closed
-                    posix.close(polled.fd);
-
-                    const last_index = active.len - 1;
-                    active[i] = active[last_index];
-                    active = active[0..last_index];
-                    poll_count = 1;
-                } else {
-                    i += 1; // go to the next socket
-                }
-            }
-        }
-
-
-    }
-};
-
-pub const DnsServer = struct {
-    ip_addr: []const u8,
-    port: u16,
-
-    pub fn init(ip_addr: []const u8, port: u16) DnsServer {
-        return DnsServer{ .ip_addr = ip_addr, .port = port };
-    }
-
-    pub fn start(self: DnsServer) !void {
-        const address = try std.net.Address.parseIp(self.ip_addr, self.port);
-        const tpe: u32 = posix.SOCK.STREAM | posix.SOCK.NONBLOCK;
-        const protocol = posix.IPPROTO.TCP;
-        const listener = try posix.socket(address.any.family, tpe, protocol);
-        defer posix.close(listener);
-
-        try posix.setsockopt(listener, posix.SOL.SOCKET, posix.SO.REUSEADDR, &std.mem.toBytes(@as(c_int, 1)));
-        try posix.bind(listener, &address.any, address.getOsSockLen());
-        try posix.listen(listener, 128);
-
-        var polls: [4096]posix.pollfd = undefined;
-        polls[0] = .{
-            .fd = listener,
-            .events = posix.POLL.IN,
-            .revents = 0,
-        };
-
-        var poll_count: usize = 1;
-
-        while (true) {
-            var active = polls[0 .. poll_count + 1];
-            _ = try posix.poll(active, -1);
-
-            if (active[0].revents != 0) { // active[0] is the listening socket
-                var client_address: net.Address = undefined;
-                var client_address_len: posix.socklen_t = @sizeOf(net.Address);
-
-                const socket = try posix.accept(listener, &client_address.any, &client_address_len, posix.SOCK.NONBLOCK);
-
-                polls[poll_count] = .{
-                    .fd = socket,
-                    .revents = 0,
-                    .events = posix.POLL.IN,
-                };
-
-                poll_count += 1;
-            }
-
-            var i: usize = 1;
-            while (i < active.len) {
-                const polled = active[i];
-
-                const revents = polled.revents;
-                if (revents == 0) {
-                    //not ready yet
-                    i += 1;
-                    continue;
-                }
-                var closed = false;
-                if (revents & posix.POLL.IN == posix.POLL.IN) {
-                    // socket is ready for polling
-                    var buf: [4096]u8 = undefined;
-                    const read = posix.read(polled.fd, &buf) catch 0;
-                    if (read == 0) {
-                        closed = true;
-                    } else {
-                        std.debug.print("[{d}] got: {any}\n", .{ polled.fd, buf[0..read] });
-                    }
-                }
-
-                if (closed or (revents & posix.POLL.HUP == posix.POLL.HUP)) {
-                    // read failed or socket is closed
-                    posix.close(polled.fd);
-
-                    const last_index = active.len - 1;
-                    active[i] = active[last_index];
-                    active = active[0..last_index];
-                    poll_count = 1;
-                } else {
-                    i += 1; // go to the next socket
-                }
-            }
-        }
     }
 };
