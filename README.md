@@ -18,3 +18,6 @@ A collections of Zig examples
 * [Non-Blocking I/O](non-blocking.zig)
 * [Non-Blocking I/O - Poll](poll.zig)
 * [Non-Blocking I/O - Pollv2](poll2.zig)
+* [Non-Blocking I/O - Pollv3](poll3.zig)
+* [Non-Blocking I/O - epoll](epoll.zig)
+* [Non-blocking I/O - kqueue](kqueue.zig)
