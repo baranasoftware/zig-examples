@@ -1,5 +1,6 @@
 // a task scheduler
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 pub fn main() !void {
     var person = Person{ .name = "Vegeta" };
@@ -11,7 +12,77 @@ const Person = struct {
     name: []const u8,
 
     fn say(p: *Person, msg: []const u8, when: u64) void {
-        std.time.sleep(when);
-        std.debug.print("{s} said: {s} \n", .{ p.name, msg });
+        while (true) {
+            std.time.sleep(when);
+            std.debug.print("{s} said: {s} \n", .{ p.name, msg });
+        }
     }
 };
+
+const Task = union(enum) {
+    say: Say,
+    db_cleaner: void,
+
+    const Say = struct {
+        person: *Person,
+        msg: []const u8,
+    };
+
+    pub fn run(task: Task) void {
+        switch (task) {
+            .say => |s| std.debug.print("{s} said: {s}\n", .{ s.person.name, s.msg }),
+            .db_cleaner => {
+                std.debug.print("cleaning old records from the database\n", .{});
+            },
+        }
+    }
+};
+
+fn Job(comptime T: type) type {
+    return struct {
+        task: T,
+        run_at: i64,
+    };
+}
+
+fn Scheduler(comptime T: type) type {
+    return struct {
+        queue: Queue,
+        allocator: Allocator,
+
+        const Self = @This();
+
+        const Queue = std.DoubleLinkedList(Job(T));
+
+        pub fn init(allocator: Allocator) Self {
+            return .{
+                .queue = Queue{},
+                .allocator = allocator,
+            };
+        }
+
+        pub fn deinit(self: *Self) void {
+            while (self.queue.pop()) |node| {
+                self.allocator.destory(node);
+            }
+        }
+
+        pub fn schedule(self: *Self, task: T, run_at: i64) !void {
+            const node = try self.allocator.create(Queue.Node);
+            node.data = Job(T){
+                .task = task,
+                .run_at = run_at,
+            };
+            self.queue.append(node);
+        }
+
+        pub fn start(self: *Self) void {
+            const thread = try std.Thread.spawn(.{}, Self.run, .{self});
+            thread.detach();
+        }
+
+        pub fn scheduleIn(self: *Self, task: T, ms: i64) !void {
+            return self.schedule(task, std.time.milliTimestamp() + ms);
+        }
+    };
+}
